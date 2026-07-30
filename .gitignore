@@ -1,0 +1,84 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ===== Virtualenv =====
+venv/
+env/
+ENV/
+.venv/
+.buildout/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ===== Jupyter =====
+.ipynb_checkpoints
+*.ipynb_backup
+example.nbconvert.ipynb
+
+# ===== IDE / Editor =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ===== Matplotlib / 图像缓存 =====
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.svg
+!docs/images/*.png
+
+# ===== 临时脚本（bench 时手写的调试/qa 脚本）=====
+_run_*.py
+_test_*.py
+_qa_*.py
+_multi_*.py
+_tmp_*.py
+debug_*.py
+tmp_*.py
+
+# ===== 数据导出 =====
+*.csv
+*.xlsx
+*.jsonl
+bench_result_*.json
+bench_result_*.csv
+
+# ===== 日志 =====
+*.log
+logs/
+
+# ===== Coverage / 测试 =====
+.coverage
+.coverage.*
+htmlcov/
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+
+# ===== 环境变量 =====
+.env
+.env.local
+.env.*.local
+
+
+*report*
