@@ -4,6 +4,7 @@ from utils import LCList, positive
 from weakref import WeakKeyDictionary as WKD
 from typing import Self
 import random
+import copy
 
 
 class Strategy:
@@ -18,6 +19,9 @@ class Strategy:
         for s in self.pipe:
             vault = s.bet(vault, data)
         return vault
+
+    def copy(self) -> Self:
+        return copy.copy(self)
 
 
 class Flat(Strategy):
@@ -64,7 +68,7 @@ class Progressive[T](Strategy):
     def transition(self, state: T, node: Node) -> T:
         raise NotImplementedError
 
-    def apply(self, vault: Vault, data: Data, state: T) -> Vault:
+    def get(self, vault: Vault, data: Data, state: T) -> Vault:
         raise NotImplementedError
 
     def bet(self, vault: Vault, data: Data) -> Vault:
@@ -79,7 +83,7 @@ class Progressive[T](Strategy):
             prev = data.nodes[cursor - 1]
             cache[current] = self.transition(cache[prev], current)
             cursor += 1
-        return self.apply(vault, data, cache[data.latest])
+        return self.get(vault, data, cache[data.latest])
 
 
 class Martingale(Progressive[int]):
@@ -87,10 +91,9 @@ class Martingale(Progressive[int]):
         super().__init__(0, reverse)
 
     def transition(self, state: int, node: Node) -> int:
-        reset = self.reverse == node.won
-        return 0 if reset else state + 1
+        return 0 if self.reverse ^ node.won else state + 1
 
-    def apply(self, vault: Vault, data: Data, state: int) -> Vault:
+    def get(self, vault: Vault, data: Data, state: int) -> Vault:
         vault.withdrawal *= 2**state
         return vault
 
@@ -102,7 +105,7 @@ class DAlembert(Progressive[float]):
     def transition(self, state: float, node: Node) -> float:
         return max(self.origin, state + (node.won == self.reverse) * 2 - 1)
 
-    def apply(self, vault: Vault, data: Data, state: float) -> Vault:
+    def get(self, vault: Vault, data: Data, state: float) -> Vault:
         vault.withdrawal *= state
         return vault
 
@@ -116,38 +119,13 @@ class Fibonacci(Progressive[int]):
 
     def __init__(self, reverse: bool = False):
         super().__init__(0, reverse)
-        self._seq = LCList(Fibonacci.fibonacci())
+        self.seq = LCList(Fibonacci.fibonacci())
 
     def transition(self, state: int, node: Node) -> int:
-        forward = not self.reverse == node.won
-        return max(0, state - 2) if forward else state + 1
+        return max(0, state - 2) if self.reverse == node.won else state + 1
 
-    def apply(self, vault: Vault, data: Data, state: int) -> Vault:
-        vault.withdrawal *= self._seq[state]
-        return vault
-
-
-class Labouchere(Progressive[list[float]]):
-    def __init__(self, sequence: list[float], reverse: bool = False):
-        super().__init__(list(sequence), reverse)
-
-    def transition(self, state: list[float], node: Node) -> list[float]:
-        seq = list(state)
-        forward = not self.reverse == node.won
-        if forward and len(seq) >= 2:
-            seq.pop()
-            seq.pop(0)
-        else:
-            bet = (seq[0] + seq[-1]) if len(seq) >= 2 else (seq[0] if seq else 0)
-            seq.append(bet)
-        if not seq:
-            seq.extend(self.origin)
-        return seq
-
-    def apply(self, vault: Vault, data: Data, state: list[float]) -> Vault:
-        vault.withdrawal *= (
-            (state[0] + state[-1]) if len(state) >= 2 else (state[0] if state else 0)
-        )
+    def get(self, vault: Vault, data: Data, state: int) -> Vault:
+        vault.withdrawal *= self.seq[state]
         return vault
 
 
@@ -160,9 +138,41 @@ class Stepping(Progressive[int]):
         reset = self.reverse == node.won
         return 0 if reset else (state + 1) % len(self.multipliers)
 
-    def apply(self, vault: Vault, data: Data, state: int) -> Vault:
+    def get(self, vault: Vault, data: Data, state: int) -> Vault:
         vault.withdrawal *= self.multipliers[state]
         return vault
+
+
+class Labouchere(Progressive[list[Strategy]]):
+    def __init__(self, strategy: Strategy, reverse: bool = False):
+        super().__init__([], reverse)
+        self.strategy = strategy
+
+    def transition(self, state: list[Strategy], node: Node) -> list[Strategy]:
+        if state:
+            state = state[:]
+            if self.reverse != node.won:
+                state.pop()
+                if len(state) >= 2:
+                    state.pop(0)
+            else:
+                state.append(self.sum(state))
+        return state
+
+    def apply(self, strategy: Self):
+        self.origin.append(strategy)
+        return self
+
+    def sum(self, state: list[Strategy]) -> Strategy:
+        target = {state[0], state[-1]}
+        sum = Sum()
+        for s in target:
+            sum = sum.apply(s)
+        return sum
+
+    def get(self, vault: Vault, data: Data, state: list[Strategy]) -> Vault:
+        strategy = self.sum(state) if state else self.strategy
+        return strategy.bet(vault, data)
 
 
 class Fork(Strategy):
@@ -226,8 +236,7 @@ class Min(Aggregator):
         return best
 
 
-class Average(Aggregator):
+class Sum(Aggregator):
     def fusion(self, vault: Vault, data: Data, candidates: list[Vault]) -> Vault:
-        total = sum(map(lambda v: v.withdrawal, candidates))
-        vault.withdrawal = total / len(candidates)
+        vault.withdrawal = sum(map(lambda v: v.withdrawal, candidates))
         return vault
